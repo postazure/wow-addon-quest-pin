@@ -3,7 +3,7 @@
 A WoW Forever addon (interface 16001) that keeps Blizzard's quest tracker focused on where you are.
 
 - **Zone quests are tracked automatically.** The tracker's "Quests" section becomes a section named after your zone, holding every quest whose objectives (or turn-in) are on this zone's map, or that the quest log files under this zone.
-- **Pin quests to keep them tracked anywhere.** Outside their zone, pinned quests sit at the top in a **Pinned** section, with a "Go to *Westfall* (from *Elwynn Forest*)" line. Inside their zone they move into the zone section and look like any other zone quest.
+- **Pin quests to keep them tracked anywhere.** Pinned quests sit at the top in a **Pinned** section, even in their own zone, with a "Go to *Westfall* (from *Elwynn Forest*)" line. Each quest shows once: pinned quests in Pinned, other quests in your zone in the zone section.
 - **Flying doesn't reshuffle the tracker.** On a flight path or a flying mount, the tracker keeps the zone you took off from. It switches to the new zone once you land.
 - Uses Blizzard's own tracker and quest log. The two sections are Blizzard's quest module with a filter, so clicking, right-click menus, POI buttons, quest items and super-tracking all work as usual.
 
@@ -11,11 +11,13 @@ A WoW Forever addon (interface 16001) that keeps Blizzard's quest tracker focuse
 
 | Where | How |
 |---|---|
-| Quest log | Tick the track box, or right-click > **Pin quest** |
+| Quest log | Click the track box, or right-click > **Pin quest** |
 | Tracker | Right-click a quest > **Pin quest** / **Unpin quest** |
 | Chat | `/qpin <quest link or ID>` |
 
-Unticking a quest (or **Stop tracking**) unpins it. For a zone quest, it also hides the quest until you leave the zone.
+In the quest log, a tick means **pinned**. Zone quests are tracked without a tick; ticking one moves it to the Pinned section, so it stays tracked when you leave. Unticking it puts it back in the zone section (or untracks it if it's not in your zone).
+
+In the tracker, **Stop tracking** unpins a quest. For a zone quest, it also hides it until you leave the zone.
 
 Hover a quest in the log to see where it goes and where it came from.
 

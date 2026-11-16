@@ -3,11 +3,11 @@
 -- How it works
 --   * The watch list (Blizzard's "tracked" quests) is kept equal to: quests in your zone + pinned quests.
 --   * Blizzard's "Quests" tracker section is swapped for two sections built from Blizzard's own quest
---     module: "<zone name>" (quests in your zone, pinned or not) and "Pinned" (pinned quests elsewhere).
+--     module: "Pinned" (every pinned quest, wherever it is) and "<zone name>" (unpinned quests in
+--     your zone). Each quest shows in one section only, Pinned first.
 --   * Pinned quests look like any other tracked quest; the Pinned section is what sets them apart.
---     The quest log keeps Blizzard's own track box.
---   * In the quest log, ticking a quest's track box pins it; unticking unpins it (or hides a zone
---     quest until you leave the zone). Right-click a quest in the log or tracker for Pin / Unpin.
+--   * In the quest log, the track box shows and toggles the pin: ticked means pinned, for zone
+--     quests too. Right-click a quest in the log or tracker for Pin / Unpin.
 
 local ADDON = ...
 
@@ -90,7 +90,10 @@ end
 
 local Reconcile -- defined below; the landing check calls it
 
+local UpdateLogRows -- defined in the quest log section below
+
 local function UpdateTrackerSections()
+    UpdateLogRows()
     if not QuestPinZoneTracker then return end
     QuestPinZoneTracker:SetHeader(zoneName or TRACKER_HEADER_QUESTS)
     QuestPinZoneTracker:MarkDirty()
@@ -287,7 +290,10 @@ QuestPinZoneTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared, 
 })
 
 function QuestPinZoneTrackerMixin:ShouldDisplayQuest(quest)
-    return inZone[quest:GetID()] and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
+    local questID = quest:GetID()
+    -- Pinned quests show in the Pinned section instead.
+    return inZone[questID] and not (db and db.pinned[questID])
+        and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
 end
 
 QuestPinPinnedTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared, {
@@ -298,7 +304,7 @@ QuestPinPinnedTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared
 -- show here; Reconcile untracks them if they aren't in your zone.
 function QuestPinPinnedTrackerMixin:ShouldDisplayQuest(quest)
     local questID = quest:GetID()
-    return db and db.pinned[questID] and not inZone[questID]
+    return db and db.pinned[questID]
         and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
 end
 
@@ -337,8 +343,19 @@ end
 -- ---------------------------------------------------------------------------
 -- Quest log
 
--- The track box is Blizzard's own: ticked for every tracked quest, pinned or not.
--- The tooltip says whether a quest is pinned.
+-- The track box is Blizzard's own, but its tick means "pinned": zone quests that are tracked but
+-- not pinned show an empty box. Blizzard shows and hides the tick itself, so we fade it instead.
+UpdateLogRows = function()
+    if not db or not QuestScrollFrame or not QuestScrollFrame.titleFramePool then return end
+    for button in QuestScrollFrame.titleFramePool:EnumerateActive() do
+        local tick = button.Checkbox and button.Checkbox.CheckMark
+        if tick then
+            local questID = button.questID
+            tick:SetAlpha((not questID or db.pinned[questID]) and 1 or 0)
+        end
+    end
+end
+
 local function AddTooltipLines(button)
     local questID = button and button.questID
     if not db or not questID or GameTooltip:GetOwner() ~= button then return end
@@ -349,7 +366,7 @@ local function AddTooltipLines(button)
     if db.pinned[questID] then
         GameTooltip:AddLine(PIN_ICON .. " Pinned: tracked in every zone", 0.6, 0.8, 1)
     else
-        GameTooltip:AddLine("Right-click > Pin quest to track it everywhere", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("Tick the box to pin it: tracked in every zone", 0.6, 0.6, 0.6)
     end
     GameTooltip:Show()
 end
@@ -393,29 +410,35 @@ end
 -- Hooks on Blizzard's own tracking actions
 
 local function SetUpHooks()
-    -- Untracking a quest (tracker "Stop tracking", shift-click, quest log box) unpins it, and hides a
-    -- zone quest until you leave the zone.
+    -- Untracking a quest (tracker "Stop tracking", shift-click) unpins it, and hides a zone quest
+    -- until you leave the zone.
+    local removedID, removedWasPinned
     hooksecurefunc(C_QuestLog, "RemoveQuestWatch", function(questID)
         if busy or not questID or not db then return end
+        removedID, removedWasPinned = questID, db.pinned[questID]
         db.pinned[questID] = nil
         if inZone[questID] then dismissed[questID] = true end
         Refresh()
     end)
 
-    -- Tracking a quest from the quest log pins it (or brings back a hidden zone quest).
+    -- The quest log's track box toggles the pin. Blizzard's click tracks or untracks the quest,
+    -- so we turn that into pin / unpin afterwards.
     if QuestMapQuestOptions_TrackQuest then
         hooksecurefunc("QuestMapQuestOptions_TrackQuest", function(questID)
             if busy or not questID or not db then return end
             if C_QuestLog.GetQuestWatchType(questID) ~= nil then
-                if dismissed[questID] then
-                    dismissed[questID] = nil
-                else
-                    db.pinned[questID] = true
-                end
-                Refresh()
+                SetPinned(questID, true) -- ticked an untracked quest
+            elseif removedID == questID and not removedWasPinned then
+                SetPinned(questID, true) -- clicked a tracked zone quest whose box was empty
+            else
+                dismissed[questID] = nil -- unpinned: stays tracked if it's in your zone
+                Reconcile()
             end
+            removedID = nil
         end)
     end
+
+    if QuestLogQuests_Update then hooksecurefunc("QuestLogQuests_Update", function() UpdateLogRows() end) end
 
     if QuestMapLogTitleButton_OnEnter then hooksecurefunc("QuestMapLogTitleButton_OnEnter", AddTooltipLines) end
 end
@@ -476,7 +499,7 @@ SlashCmdList.QUESTPIN = function(msg)
         for _, name in ipairs({ "auto", "objectives", "logzone", "location", "flight" }) do
             Print(("/qpin %s - %s (%s)"):format(name, TOGGLES[name].label, OnOff(db[TOGGLES[name].key])))
         end
-        Print("In the quest log, tick a quest's track box (or right-click > Pin quest) to pin it.")
+        Print("In the quest log, tick a quest's box (or right-click > Pin quest) to pin it.")
     end
 end
 
