@@ -4,6 +4,7 @@ A WoW Forever addon (interface 16001) that keeps Blizzard's quest tracker focuse
 
 - **Zone quests are tracked automatically.** The tracker's "Quests" section becomes a section named after your zone, holding every quest whose objectives (or turn-in) are on this zone's map, or that the quest log files under this zone.
 - **Pin quests to keep them tracked anywhere.** Outside their zone, pinned quests sit at the top in a **Pinned** section, with a "Go to *Westfall* (from *Elwynn Forest*)" line. Inside their zone they move into the zone section and look like any other zone quest.
+- **Flying doesn't reshuffle the tracker.** On a flight path or a flying mount, the tracker keeps the zone you took off from. It switches to the new zone once you land.
 - Uses Blizzard's own tracker and quest log. The two sections are Blizzard's quest module with a filter, so clicking, right-click menus, POI buttons, quest items and super-tracking all work as usual.
 
 ## Pinning
@@ -26,6 +27,7 @@ Hover a quest in the log to see where it goes and where it came from.
 - `objectives`: count a quest as "in the zone" if the map sends you here
 - `logzone`: count it as "in the zone" if the quest log files it under this zone
 - `location`: show where pinned quests go
+- `flight`: keep the last zone's quests while flying, until you land
 
 ## Where the location data comes from
 

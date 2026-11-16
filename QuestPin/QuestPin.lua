@@ -20,6 +20,7 @@ local DEFAULTS = {
     matchObjectives = true, -- a quest is "in the zone" if the map sends you there
     matchLogZone = true,    -- ... or if the quest log files it under this zone
     showLocation = true,    -- "Go to X (from Y)" line on pinned quests
+    holdInFlight = true,    -- keep the current zone's quests while flying; switch once you land
 }
 
 local db                -- QuestPinDB: { pinned = {[questID]=true}, giver = {[questID]=zoneName}, options... }
@@ -28,6 +29,7 @@ local logZone = {}      -- questID -> quest log header (normally the zone the qu
 local destCache = {}    -- questID -> zone info table or false (rebuilt by Reconcile)
 local dismissed = {}    -- questID -> true: zone quests you untracked; cleared when you change zone
 local zoneID, zoneName  -- the zone you're in
+local curZone           -- its map info (kept while flying)
 local busy = false      -- true while we change the watch list ourselves
 local menuQuestID       -- quest whose tracker menu is being built
 
@@ -86,6 +88,8 @@ local function MaxWatches()
     return Constants and Constants.QuestWatchConsts and Constants.QuestWatchConsts.MAX_QUEST_WATCHES or 25
 end
 
+local Reconcile -- defined below; the landing check calls it
+
 local function UpdateTrackerSections()
     if not QuestPinZoneTracker then return end
     QuestPinZoneTracker:SetHeader(zoneName or TRACKER_HEADER_QUESTS)
@@ -93,7 +97,24 @@ local function UpdateTrackerSections()
     QuestPinPinnedTracker:MarkDirty()
 end
 
-local function Reconcile()
+local function InFlight()
+    return UnitOnTaxi("player") or IsFlying()
+end
+
+-- While flying, check once a second for landing (flying mounts have no landing event).
+local landingTicker
+local function WatchForLanding()
+    if landingTicker then return end
+    landingTicker = C_Timer.NewTicker(1, function()
+        if not InFlight() then
+            landingTicker:Cancel()
+            landingTicker = nil
+            Reconcile()
+        end
+    end)
+end
+
+function Reconcile()
     if not db then return end
 
     -- Scan the quest log.
@@ -122,8 +143,15 @@ local function Reconcile()
         end
     end
 
-    -- Which zone are we in?
-    local zone = ToZone(C_Map.GetBestMapForUnit("player"))
+    -- Which zone are we in? While flying, stay with the zone you took off from until you land.
+    local zone
+    if db.holdInFlight and curZone and InFlight() then
+        zone = curZone
+        WatchForLanding()
+    else
+        zone = ToZone(C_Map.GetBestMapForUnit("player"))
+    end
+    curZone = zone
     local newZoneID = zone and zone.mapID
     if newZoneID ~= zoneID then
         zoneID = newZoneID
@@ -406,6 +434,7 @@ local TOGGLES = {
     objectives = { key = "matchObjectives", label = "Zone quests: the map sends you here" },
     logzone = { key = "matchLogZone", label = "Zone quests: the quest log files it under this zone" },
     location = { key = "showLocation", label = "Show where pinned quests go and where they came from" },
+    flight = { key = "holdInFlight", label = "Keep tracking your last zone while flying, until you land" },
 }
 
 SLASH_QUESTPIN1 = "/questpin"
@@ -444,7 +473,7 @@ SlashCmdList.QUESTPIN = function(msg)
         Print("/qpin <quest link or ID> - pin or unpin a quest")
         Print("/qpin list - list pinned quests")
         Print("/qpin clear - unpin everything")
-        for _, name in ipairs({ "auto", "objectives", "logzone", "location" }) do
+        for _, name in ipairs({ "auto", "objectives", "logzone", "location", "flight" }) do
             Print(("/qpin %s - %s (%s)"):format(name, TOGGLES[name].label, OnOff(db[TOGGLES[name].key])))
         end
         Print("In the quest log, tick a quest's track box (or right-click > Pin quest) to pin it.")
@@ -476,6 +505,7 @@ events:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("QUEST_WATCH_LIST_CHANGED") -- untrack Blizzard's auto-tracked quests promptly
         self:RegisterEvent("QUEST_ACCEPTED")
         self:RegisterEvent("QUEST_REMOVED")
+        self:RegisterEvent("PLAYER_CONTROL_GAINED") -- flight path landing
     elseif event == "PLAYER_ENTERING_WORLD" then
         Install()
         Refresh(0.5)
