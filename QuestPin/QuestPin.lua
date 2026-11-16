@@ -266,9 +266,12 @@ QuestPinPinnedTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared
     headerText = PINNED_HEADER,
 })
 
--- Everything tracked outside the zone. Normally that's only pinned quests.
+-- Only quests you pinned. Quests Blizzard auto-tracks (on accept, or when objectives update) never
+-- show here; Reconcile untracks them if they aren't in your zone.
 function QuestPinPinnedTrackerMixin:ShouldDisplayQuest(quest)
-    return not inZone[quest:GetID()] and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
+    local questID = quest:GetID()
+    return db and db.pinned[questID] and not inZone[questID]
+        and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
 end
 
 -- Auto-quest popups ("click to complete") show once, in the zone section.
@@ -470,6 +473,7 @@ events:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("ZONE_CHANGED_INDOORS")
         self:RegisterEvent("QUEST_LOG_UPDATE")
         self:RegisterEvent("QUEST_POI_UPDATE")
+        self:RegisterEvent("QUEST_WATCH_LIST_CHANGED") -- untrack Blizzard's auto-tracked quests promptly
         self:RegisterEvent("QUEST_ACCEPTED")
         self:RegisterEvent("QUEST_REMOVED")
     elseif event == "PLAYER_ENTERING_WORLD" then
