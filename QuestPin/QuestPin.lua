@@ -4,7 +4,8 @@
 --   * The watch list (Blizzard's "tracked" quests) is kept equal to: quests in your zone + pinned quests.
 --   * Blizzard's "Quests" tracker section is swapped for two sections built from Blizzard's own quest
 --     module: "<zone name>" (quests in your zone, pinned or not) and "Pinned" (pinned quests elsewhere).
---   * Pinned quests get a pushpin after their title, in the tracker and on the quest log's track box.
+--   * Pinned quests outside your zone get a pushpin after their title in the tracker, and in place
+--     of the quest log's track box. In your zone they look like any other zone quest.
 --   * In the quest log, ticking a quest's track box pins it; unticking unpins it (or hides a zone
 --     quest until you leave the zone). Right-click a quest in the log or tracker for Pin / Unpin.
 
@@ -85,7 +86,10 @@ local function MaxWatches()
     return Constants and Constants.QuestWatchConsts and Constants.QuestWatchConsts.MAX_QUEST_WATCHES or 25
 end
 
+local UpdateLogRows -- defined in the quest log section below
+
 local function UpdateTrackerSections()
+    UpdateLogRows() -- a zone change can move the pin on or off a quest log row
     if not QuestPinZoneTracker then return end
     QuestPinZoneTracker:SetHeader(zoneName or TRACKER_HEADER_QUESTS)
     QuestPinZoneTracker:MarkDirty()
@@ -196,7 +200,6 @@ end
 -- ---------------------------------------------------------------------------
 -- Pins
 
-local function UpdateLogRows() end -- defined below
 
 local function SetPinned(questID, pinned)
     if not db or not questID then return end
@@ -222,7 +225,8 @@ local Shared = {}
 -- Blizzard appends this after the quest title, so the pushpin goes there.
 function Shared:GetQuestTagText(questID)
     local tag = QuestObjectiveTrackerMixin.GetQuestTagText(self, questID)
-    if db and db.pinned[questID] then
+    -- Only in the Pinned section; in the zone section a pinned quest looks like any other.
+    if not self.isZoneSection and db and db.pinned[questID] then
         return tag and (tag .. " " .. PIN_ICON) or PIN_ICON
     end
     return tag
@@ -318,23 +322,28 @@ end
 
 local rowIcons = setmetatable({}, { __mode = "k" })
 
--- Pinned quests show a pushpin in place of the track box's tick.
+-- Pinned quests outside your zone show a pushpin in place of the track box. The box's own
+-- textures (square, tick, highlight) are faded out rather than hidden, because Blizzard
+-- shows and hides the tick itself.
 UpdateLogRows = function()
     if not db or not QuestScrollFrame or not QuestScrollFrame.titleFramePool then return end
     for button in QuestScrollFrame.titleFramePool:EnumerateActive() do
         local box = button.Checkbox
         if box then
-            local pinned = button.questID and db.pinned[button.questID] or false
+            local questID = button.questID
+            local showPin = (questID and db.pinned[questID] and not inZone[questID]) and true or false
             local icon = rowIcons[button]
-            if pinned and not icon then
+            if showPin and not icon then
                 icon = box:CreateTexture(nil, "OVERLAY")
                 icon:SetTexture(PIN_TEX)
                 icon:SetSize(18, 18)
-                icon:SetPoint("CENTER", box, "CENTER", 2, 2)
+                icon:SetPoint("CENTER", box, "CENTER", 1, 1)
                 rowIcons[button] = icon
             end
-            if icon then icon:SetShown(pinned) end
-            if pinned and box.CheckMark then box.CheckMark:Hide() end
+            if icon then icon:SetShown(showPin) end
+            for _, region in ipairs({ box:GetRegions() }) do
+                if region ~= icon then region:SetAlpha(showPin and 0 or 1) end
+            end
         end
     end
 end
