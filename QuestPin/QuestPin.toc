@@ -1,0 +1,11 @@
+## Interface: 16001
+## AllowLoadGameType: camelot
+## Title: Quest Pin
+## Notes: Tracks the quests for the zone you're in, and keeps pinned quests tracked everywhere.
+## Version: 0.1.0
+## Category: Quests
+## IconTexture: Interface\AddOns\QuestPin\Media\pin
+## SavedVariablesPerCharacter: QuestPinDB
+
+QuestPin.lua
+QuestPin.xml
