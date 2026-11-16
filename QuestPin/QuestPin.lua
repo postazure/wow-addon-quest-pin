@@ -299,9 +299,10 @@ local function Install(tries)
     end
     installed = true
 
+    -- Pinned goes first, then the zone section.
     local order = blizzard.uiOrder or 4
+    QuestPinPinnedTracker.uiOrder = order - 0.5
     QuestPinZoneTracker.uiOrder = order
-    QuestPinPinnedTracker.uiOrder = order + 0.5
 
     container:RemoveModule(blizzard)
     manager.moduleToContainerMap[blizzard] = nil
