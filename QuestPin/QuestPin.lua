@@ -302,8 +302,26 @@ local function LocationText(questID, isZoneSection)
     end
 end
 
+-- Blizzard only makes a quest's title clickable. Make the rest of the block (its objective lines)
+-- act like the title too: left-click opens the quest in the quest log, right-click opens the menu.
+local function BlockOnMouseUp(block, mouseButton)
+    if block:IsMouseOver() then block:OnHeaderClick(mouseButton) end
+end
+local function BlockOnEnter(block) block:OnHeaderEnter() end
+local function BlockOnLeave(block) block:OnHeaderLeave() end
+
+local function MakeBlockClickable(block)
+    if block.questPinClickable then return end
+    block.questPinClickable = true
+    block:EnableMouse(true)
+    block:HookScript("OnMouseUp", BlockOnMouseUp)
+    block:HookScript("OnEnter", BlockOnEnter)
+    block:HookScript("OnLeave", BlockOnLeave)
+end
+
 -- Called by Blizzard's UpdateSingle before the objectives; the location line goes first.
 function Shared:DoQuestObjectives(block, ...)
+    MakeBlockClickable(block)
     if db and db.showLocation then
         local text = LocationText(block.id, self.isZoneSection)
         if text then

@@ -40,7 +40,7 @@ known = {
     'EnumerateActive',
     # ObjectiveTrackerManager / container / module / block mixins (Blizzard_ObjectiveTracker).
     'GetContainerForModule', 'RemoveModule', 'SetModuleContainer', 'SetHeader', 'MarkDirty',
-    'AddObjective',
+    'AddObjective', 'OnHeaderClick', 'OnHeaderEnter', 'OnHeaderLeave',
     # C_Timer tickers.
     'Cancel',
     # QuestCache quest objects.
