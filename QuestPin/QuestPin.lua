@@ -59,6 +59,39 @@ local function ToZone(mapID)
     return info
 end
 
+-- The place you're in, as { id, name, maps = {[mapID]=true}, names = {[name]=true} }.
+-- In a dungeon or raid this is the whole instance: every floor's map, plus the instance's own name
+-- (some instances have no map at all). Elsewhere it's the zone.
+local function CurrentZone()
+    local info = ToZone(C_Map.GetBestMapForUnit("player"))
+    local instName, instanceID
+    if IsInInstance() then
+        local name, _, _, _, _, _, _, id = GetInstanceInfo()
+        if name and name ~= "" then instName, instanceID = name, id end
+    end
+    if not info and not instName then return nil end
+
+    local zone = { maps = {}, names = {} }
+    if info then
+        zone.id, zone.name = info.mapID, info.name
+        zone.maps[info.mapID] = true
+        if info.name then zone.names[info.name] = true end
+        -- Multi-floor maps (dungeon levels) share a map group.
+        local group = C_Map.GetMapGroupID and C_Map.GetMapGroupID(info.mapID)
+        local floors = group and C_Map.GetMapGroupMembersInfo(group)
+        for _, floor in ipairs(floors or {}) do
+            zone.maps[floor.mapID] = true
+            if floor.name then zone.names[floor.name] = true end
+        end
+    end
+    if instName then
+        -- Same zone on every floor, so changing floors doesn't reset anything.
+        zone.id, zone.name = "instance:" .. tostring(instanceID or instName), instName
+        zone.names[instName] = true
+    end
+    return zone
+end
+
 -- Where the quest wants you to go next: the map its objectives (or turn-in) are on.
 local function Destination(questID)
     local dest = destCache[questID]
@@ -152,10 +185,10 @@ function Reconcile()
         zone = curZone
         WatchForLanding()
     else
-        zone = ToZone(C_Map.GetBestMapForUnit("player"))
+        zone = CurrentZone()
     end
     curZone = zone
-    local newZoneID = zone and zone.mapID
+    local newZoneID = zone and zone.id
     if newZoneID ~= zoneID then
         zoneID = newZoneID
         zoneName = zone and zone.name
@@ -166,17 +199,19 @@ function Reconcile()
     wipe(inZone)
     if zone then
         if db.matchObjectives then
-            for _, poi in ipairs(C_QuestLog.GetQuestsOnMap(zone.mapID) or {}) do
-                if logZone[poi.questID] then inZone[poi.questID] = true end
+            for mapID in pairs(zone.maps) do
+                for _, poi in ipairs(C_QuestLog.GetQuestsOnMap(mapID) or {}) do
+                    if logZone[poi.questID] then inZone[poi.questID] = true end
+                end
             end
         end
         for questID, logHeader in pairs(logZone) do
             if not inZone[questID] then
-                if db.matchLogZone and logHeader == zone.name then
+                if db.matchLogZone and zone.names[logHeader] then
                     inZone[questID] = true
                 elseif db.matchObjectives then
                     local dest = Destination(questID)
-                    if dest and dest.mapID == zone.mapID then inZone[questID] = true end
+                    if dest and zone.maps[dest.mapID] then inZone[questID] = true end
                 end
             end
         end
@@ -536,7 +571,7 @@ events:SetScript("OnEvent", function(self, event, ...)
         -- Some clients send (questLogIndex, questID), others just (questID).
         local a, b = ...
         local questID = b or a
-        local zone = ToZone(C_Map.GetBestMapForUnit("player"))
+        local zone = CurrentZone()
         if questID and zone and zone.name then db.giver[questID] = zone.name end
         Refresh()
     elseif event == "QUEST_REMOVED" then
