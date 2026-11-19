@@ -2,9 +2,10 @@
 --
 -- How it works
 --   * The watch list (Blizzard's "tracked" quests) is kept equal to: quests in your zone + pinned quests.
---   * Blizzard's "Quests" tracker section is swapped for two sections built from Blizzard's own quest
+--   * Blizzard's "Quests" tracker section is swapped for sections built from Blizzard's own quest
 --     module: "Pinned" (every pinned quest, wherever it is) and "<zone name>" (unpinned quests in
---     your zone). Each quest shows in one section only, Pinned first.
+--     your zone), with finished quests from either moved to "Ready to turn in" below them.
+--     Each quest shows in one section only.
 --   * Pinned quests look like any other tracked quest; the Pinned section is what sets them apart.
 --   * In the quest log, the track box shows and toggles the pin: ticked means pinned, for zone
 --     quests too. Right-click a quest in the log or tracker for Pin / Unpin.
@@ -14,6 +15,7 @@ local ADDON = ...
 local PIN_TEX = "Interface\\AddOns\\QuestPin\\Media\\pin"
 local PIN_ICON = "|T" .. PIN_TEX .. ":0:0:0:0|t"
 local PINNED_HEADER = "Pinned"
+local READY_HEADER = "Ready to turn in"
 
 local DEFAULTS = {
     autoZone = true,        -- track quests in your zone automatically
@@ -131,6 +133,7 @@ local function UpdateTrackerSections()
     QuestPinZoneTracker:SetHeader(zoneName or TRACKER_HEADER_QUESTS)
     QuestPinZoneTracker:MarkDirty()
     QuestPinPinnedTracker:MarkDirty()
+    QuestPinReadyTracker:MarkDirty()
 end
 
 local function InFlight()
@@ -342,10 +345,15 @@ QuestPinZoneTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared, 
     isZoneSection = true,
 })
 
+-- Quests ready to turn in show in their own section instead of Pinned or the zone section.
+local function IsReady(questID)
+    return C_QuestLog.IsComplete(questID)
+end
+
 function QuestPinZoneTrackerMixin:ShouldDisplayQuest(quest)
     local questID = quest:GetID()
     -- Pinned quests show in the Pinned section instead.
-    return inZone[questID] and not (db and db.pinned[questID])
+    return inZone[questID] and not (db and db.pinned[questID]) and not IsReady(questID)
         and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
 end
 
@@ -357,12 +365,26 @@ QuestPinPinnedTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared
 -- show here; Reconcile untracks them if they aren't in your zone.
 function QuestPinPinnedTrackerMixin:ShouldDisplayQuest(quest)
     local questID = quest:GetID()
-    return db and db.pinned[questID]
+    return db and db.pinned[questID] and not IsReady(questID)
         and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
 end
 
 -- Auto-quest popups ("click to complete") show once, in the zone section.
 function QuestPinPinnedTrackerMixin:AddAutoQuestObjectives()
+end
+
+QuestPinReadyTrackerMixin = CreateFromMixins(QuestObjectiveTrackerMixin, Shared, {
+    headerText = READY_HEADER,
+})
+
+-- Finished quests that would otherwise show in Pinned or the zone section.
+function QuestPinReadyTrackerMixin:ShouldDisplayQuest(quest)
+    local questID = quest:GetID()
+    return IsReady(questID) and ((db and db.pinned[questID]) or inZone[questID])
+        and QuestObjectiveTrackerMixin.ShouldDisplayQuest(self, quest)
+end
+
+function QuestPinReadyTrackerMixin:AddAutoQuestObjectives()
 end
 
 -- Swap Blizzard's "Quests" section for ours, in the same spot.
@@ -379,10 +401,11 @@ local function Install(tries)
     end
     installed = true
 
-    -- Pinned goes first, then the zone section.
+    -- Pinned, then the zone section, then Ready to turn in.
     local order = blizzard.uiOrder or 4
     QuestPinPinnedTracker.uiOrder = order - 0.5
     QuestPinZoneTracker.uiOrder = order
+    QuestPinReadyTracker.uiOrder = order + 0.5
 
     container:RemoveModule(blizzard)
     manager.moduleToContainerMap[blizzard] = nil
@@ -390,6 +413,7 @@ local function Install(tries)
 
     manager:SetModuleContainer(QuestPinZoneTracker, container)
     manager:SetModuleContainer(QuestPinPinnedTracker, container)
+    manager:SetModuleContainer(QuestPinReadyTracker, container)
     Reconcile()
 end
 

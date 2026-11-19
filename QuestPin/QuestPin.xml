@@ -1,6 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
-	<!-- Two sections in Blizzard's objective tracker, built from Blizzard's own quest module.
+	<!-- Three sections in Blizzard's objective tracker, built from Blizzard's own quest module.
 	     They replace the "Quests" section; QuestPin.lua swaps them in. -->
 	<Frame name="QuestPinZoneTracker" mixin="QuestPinZoneTrackerMixin" inherits="ObjectiveTrackerModuleTemplate"/>
 	<Frame name="QuestPinPinnedTracker" mixin="QuestPinPinnedTrackerMixin" inherits="ObjectiveTrackerModuleTemplate"/>
+	<Frame name="QuestPinReadyTracker" mixin="QuestPinReadyTrackerMixin" inherits="ObjectiveTrackerModuleTemplate"/>
 </Ui>
