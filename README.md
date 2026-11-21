@@ -24,6 +24,8 @@ In the tracker, **Stop tracking** unpins a quest. For a zone quest, it also hide
 
 Hover a quest in the log to see where it goes and where it came from.
 
+Each zone header in the quest log shows how many of its quests are grey / green / yellow / orange / red, in those colors, next to the **+**. Colors with no quests are left out.
+
 ## Commands
 
 `/qpin` (or `/questpin`) shows help and settings. Use `/qpin list` to list pinned quests and `/qpin clear` to unpin them all. These toggle a setting:

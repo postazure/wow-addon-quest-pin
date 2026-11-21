@@ -39,6 +39,22 @@ local function Print(msg)
     print("|cffffd200Quest Pin:|r " .. msg)
 end
 
+-- Runs our extras inside Blizzard's tracker and quest log updates. An error in them would stop
+-- Blizzard's update half way (stale objectives), so catch it and print it once instead.
+local reportedErrors = {}
+local function Safe(f, ...)
+    local ok, err = pcall(f, ...)
+    if not ok then
+        err = tostring(err)
+        if not reportedErrors[err] then
+            reportedErrors[err] = true
+            Print("|cffff4040error|r (please report): " .. err)
+        end
+        return nil
+    end
+    return err
+end
+
 -- ---------------------------------------------------------------------------
 -- Maps
 
@@ -128,12 +144,13 @@ local Reconcile -- defined below; the landing check calls it
 local UpdateLogRows -- defined in the quest log section below
 
 local function UpdateTrackerSections()
-    UpdateLogRows()
-    if not QuestPinZoneTracker then return end
-    QuestPinZoneTracker:SetHeader(zoneName or TRACKER_HEADER_QUESTS)
-    QuestPinZoneTracker:MarkDirty()
-    QuestPinPinnedTracker:MarkDirty()
-    QuestPinReadyTracker:MarkDirty()
+    if QuestPinZoneTracker then
+        QuestPinZoneTracker:SetHeader(zoneName or TRACKER_HEADER_QUESTS)
+        QuestPinZoneTracker:MarkDirty()
+        QuestPinPinnedTracker:MarkDirty()
+        QuestPinReadyTracker:MarkDirty()
+    end
+    Safe(UpdateLogRows)
 end
 
 local function InFlight()
@@ -259,7 +276,7 @@ local function Refresh(delay)
     pending = true
     C_Timer.After(delay or 0.1, function()
         pending = false
-        Reconcile()
+        Safe(Reconcile)
     end)
 end
 
@@ -323,15 +340,19 @@ local function MakeBlockClickable(block)
 end
 
 -- Called by Blizzard's UpdateSingle before the objectives; the location line goes first.
-function Shared:DoQuestObjectives(block, ...)
+local function AddLocationLine(block, isZoneSection)
     MakeBlockClickable(block)
     if db and db.showLocation then
-        local text = LocationText(block.id, self.isZoneSection)
+        local text = LocationText(block.id, isZoneSection)
         if text then
             block:AddObjective("QuestPinLocation", text, nil, true, OBJECTIVE_DASH_STYLE_HIDE,
                 OBJECTIVE_TRACKER_COLOR["Normal"])
         end
     end
+end
+
+function Shared:DoQuestObjectives(block, ...)
+    Safe(AddLocationLine, block, self.isZoneSection)
     return QuestObjectiveTrackerMixin.DoQuestObjectives(self, block, ...)
 end
 
@@ -422,6 +443,85 @@ end
 
 -- The track box is Blizzard's own, but its tick means "pinned": zone quests that are tracked but
 -- not pinned show an empty box. Blizzard shows and hides the tick itself, so we fade it instead.
+-- Zone headers show how many of their quests are grey / green / yellow / orange / red, just left
+-- of the +.
+local DIFFICULTY_BUCKETS -- RelativeContentDifficulty -> 1 grey, 2 green, 3 yellow, 4 orange, 5 red
+local BUCKET_COLORS = {}  -- bucket -> "ffRRGGBB"
+
+local function SetUpDifficulty()
+    local d = Enum and Enum.RelativeContentDifficulty
+    if DIFFICULTY_BUCKETS or not d or not GetDifficultyColor then return DIFFICULTY_BUCKETS end
+    DIFFICULTY_BUCKETS = {
+        [d.Trivial] = 1, [d.Easy] = 2, [d.Fair] = 3, [d.Difficult] = 4, [d.Impossible] = 5,
+    }
+    for diff, bucket in pairs(DIFFICULTY_BUCKETS) do
+        local c = GetDifficultyColor(diff)
+        if c and c.r then
+            BUCKET_COLORS[bucket] = ("ff%02x%02x%02x"):format(floor(c.r * 255 + 0.5), floor(c.g * 255 + 0.5), floor(c.b * 255 + 0.5))
+        end
+    end
+    return DIFFICULTY_BUCKETS
+end
+
+-- questLogIndex of each header -> { grey, green, yellow, orange, red }
+local function CountByHeader()
+    local buckets = SetUpDifficulty()
+    if not buckets or not C_PlayerInfo or not C_PlayerInfo.GetContentDifficultyQuestForPlayer then return end
+    local counts, current = {}, nil
+    for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+        local info = C_QuestLog.GetInfo(i)
+        if info then
+            if info.isHeader then
+                current = { 0, 0, 0, 0, 0 }
+                counts[i] = current
+            elseif current and not info.isHidden and not info.isTask and not info.isBounty then
+                local bucket = buckets[C_PlayerInfo.GetContentDifficultyQuestForPlayer(info.questID)]
+                if bucket then current[bucket] = current[bucket] + 1 end
+            end
+        end
+    end
+    return counts
+end
+
+-- Only colors that have quests, e.g. "3/1" (green, orange); nil when there are none.
+local function CountsText(c)
+    local parts = {}
+    for bucket = 1, 5 do
+        if c[bucket] > 0 then
+            parts[#parts + 1] = ("|c%s%d|r"):format(BUCKET_COLORS[bucket] or "ffffffff", c[bucket])
+        end
+    end
+    if #parts > 0 then return table.concat(parts, "|cff808080/|r") end
+end
+
+local function UpdateLogHeaders()
+    local pool = QuestScrollFrame and QuestScrollFrame.headerFramePool
+    if not pool then return end
+    local counts = CountByHeader()
+    for header in pool:EnumerateActive() do
+        local text = header.ButtonText
+        local collapse = header.CollapseButton
+        if text and collapse then
+            local label = header.questPinCounts
+            if not label then
+                label = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                label:SetPoint("RIGHT", collapse, "LEFT", -4, 0)
+                header.questPinCounts = label
+                -- Keep the zone name from running under the counts.
+                text:SetPoint("RIGHT", label, "LEFT", -4, 0)
+            end
+            local c = counts and counts[header.questLogIndex]
+            local countsText = c and CountsText(c)
+            if countsText then
+                label:SetText(countsText)
+                label:Show()
+            else
+                label:Hide()
+            end
+        end
+    end
+end
+
 UpdateLogRows = function()
     if not db or not QuestScrollFrame or not QuestScrollFrame.titleFramePool then return end
     for button in QuestScrollFrame.titleFramePool:EnumerateActive() do
@@ -431,6 +531,7 @@ UpdateLogRows = function()
             tick:SetAlpha((not questID or db.pinned[questID]) and 1 or 0)
         end
     end
+    UpdateLogHeaders()
 end
 
 local function AddTooltipLines(button)
@@ -515,7 +616,7 @@ local function SetUpHooks()
         end)
     end
 
-    if QuestLogQuests_Update then hooksecurefunc("QuestLogQuests_Update", function() UpdateLogRows() end) end
+    if QuestLogQuests_Update then hooksecurefunc("QuestLogQuests_Update", function() Safe(UpdateLogRows) end) end
 
     if QuestMapLogTitleButton_OnEnter then hooksecurefunc("QuestMapLogTitleButton_OnEnter", AddTooltipLines) end
 end
@@ -605,6 +706,7 @@ events:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("QUEST_WATCH_LIST_CHANGED") -- untrack Blizzard's auto-tracked quests promptly
         self:RegisterEvent("QUEST_ACCEPTED")
         self:RegisterEvent("QUEST_REMOVED")
+        self:RegisterEvent("QUEST_TURNED_IN")
         self:RegisterEvent("PLAYER_CONTROL_GAINED") -- flight path landing
     elseif event == "PLAYER_ENTERING_WORLD" then
         Install()
@@ -615,6 +717,11 @@ events:SetScript("OnEvent", function(self, event, ...)
         local questID = b or a
         local zone = CurrentZone()
         if questID and zone and zone.name then db.giver[questID] = zone.name end
+        Refresh()
+    elseif event == "QUEST_TURNED_IN" then
+        -- The tracker plays a turn-in animation first; lay the sections out again once it's done,
+        -- so an emptied Ready to turn in section goes away.
+        C_Timer.After(2, UpdateTrackerSections)
         Refresh()
     elseif event == "QUEST_REMOVED" then
         local questID = ...
