@@ -23,6 +23,7 @@ local DEFAULTS = {
     matchLogZone = true,    -- ... or if the quest log files it under this zone
     showLocation = true,    -- "Go to X (from Y)" line on pinned quests
     holdInFlight = true,    -- keep the current zone's quests while flying; switch once you land
+    sortByDistance = true,  -- nearest quests first in each tracker section
 }
 
 local db                -- QuestPinDB: { pinned = {[questID]=true}, giver = {[questID]=zoneName}, options... }
@@ -303,6 +304,66 @@ end
 -- Tracker sections (Blizzard's quest module, filtered)
 
 local Shared = {}
+
+-- Nearest first. The order is worked out at most every SORT_COOLDOWN seconds, so quests don't
+-- keep swapping places as you move. Quests added since then go below the sorted ones.
+local SORT_COOLDOWN = 15
+local distanceRank = {} -- questID -> 1 for the nearest tracked quest, 2 for the next...
+local lastSort = -SORT_COOLDOWN
+local FAR = math.huge
+
+local function QuestDistance(questID)
+    local distSq, onContinent = C_QuestLog.GetDistanceSqToQuest(questID)
+    if distSq and onContinent then return distSq end
+    return FAR -- on another continent, or no location
+end
+
+-- Recomputes the order if the cooldown is over (or `force`). Redraws the tracker if it changed.
+local function UpdateDistanceOrder(force)
+    if not db or not db.sortByDistance or not C_QuestLog.GetDistanceSqToQuest then return end
+    local now = GetTime()
+    if not force and now - lastSort < SORT_COOLDOWN then return end
+    lastSort = now
+
+    local list, dist = {}, {}
+    for i = 1, C_QuestLog.GetNumQuestWatches() do
+        local questID = C_QuestLog.GetQuestIDForQuestWatchIndex(i)
+        if questID then
+            list[#list + 1] = questID
+            dist[questID] = QuestDistance(questID)
+        end
+    end
+    table.sort(list, function(a, b)
+        if dist[a] ~= dist[b] then return dist[a] < dist[b] end
+        return a < b
+    end)
+
+    local changed = false
+    for rank, questID in ipairs(list) do
+        if distanceRank[questID] ~= rank then changed = true end
+    end
+    for questID in pairs(distanceRank) do
+        if not dist[questID] then changed = true end
+    end
+    if not changed then return end
+    wipe(distanceRank)
+    for rank, questID in ipairs(list) do distanceRank[questID] = rank end
+    UpdateTrackerSections()
+end
+
+-- Blizzard lists tracked quests in watch order; sort them by distance instead.
+function Shared:BuildQuestWatchInfos()
+    local infos = QuestObjectiveTrackerMixin.BuildQuestWatchInfos(self)
+    if db and db.sortByDistance then
+        table.sort(infos, function(a, b)
+            local ra = distanceRank[a.quest:GetID()] or FAR
+            local rb = distanceRank[b.quest:GetID()] or FAR
+            if ra ~= rb then return ra < rb end
+            return a.index < b.index
+        end)
+    end
+    return infos
+end
 
 local function LocationText(questID, isZoneSection)
     local from = GiverZone(questID)
@@ -636,6 +697,7 @@ local TOGGLES = {
     logzone = { key = "matchLogZone", label = "Zone quests: the quest log files it under this zone" },
     location = { key = "showLocation", label = "Show where pinned quests go and where they came from" },
     flight = { key = "holdInFlight", label = "Keep tracking your last zone while flying, until you land" },
+    sort = { key = "sortByDistance", label = "Sort tracked quests by distance, nearest first" },
 }
 
 SLASH_QUESTPIN1 = "/questpin"
@@ -648,6 +710,7 @@ SlashCmdList.QUESTPIN = function(msg)
         db[toggle.key] = not db[toggle.key]
         Print(toggle.label .. ": " .. OnOff(db[toggle.key]))
         Reconcile()
+        if cmd == "sort" then UpdateDistanceOrder(true) end
     elseif cmd == "list" then
         local any = false
         for questID in pairs(db.pinned) do
@@ -674,7 +737,7 @@ SlashCmdList.QUESTPIN = function(msg)
         Print("/qpin <quest link or ID> - pin or unpin a quest")
         Print("/qpin list - list pinned quests")
         Print("/qpin clear - unpin everything")
-        for _, name in ipairs({ "auto", "objectives", "logzone", "location", "flight" }) do
+        for _, name in ipairs({ "auto", "objectives", "logzone", "location", "flight", "sort" }) do
             Print(("/qpin %s - %s (%s)"):format(name, TOGGLES[name].label, OnOff(db[TOGGLES[name].key])))
         end
         Print("In the quest log, tick a quest's box (or right-click > Pin quest) to pin it.")
@@ -707,6 +770,8 @@ events:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("QUEST_ACCEPTED")
         self:RegisterEvent("QUEST_REMOVED")
         self:RegisterEvent("QUEST_TURNED_IN")
+        -- Distances change as you move, without any event; check the order every few seconds.
+        C_Timer.NewTicker(3, function() Safe(UpdateDistanceOrder) end)
         self:RegisterEvent("PLAYER_CONTROL_GAINED") -- flight path landing
     elseif event == "PLAYER_ENTERING_WORLD" then
         Install()

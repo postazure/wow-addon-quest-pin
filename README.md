@@ -7,6 +7,7 @@ A WoW Forever addon (interface 16001) that keeps Blizzard's quest tracker focuse
 - **Finished quests get their own section.** Quests from Pinned or your zone that are ready to turn in move to a **Ready to turn in** section below the zone section, with where to turn them in.
 - **Dungeons and raids count as a zone.** Inside one, the zone section is named after the instance and holds quests for any of its floors, or that the quest log files under it.
 - **Flying doesn't reshuffle the tracker.** On a flight path or a flying mount, the tracker keeps the zone you took off from. It switches to the new zone once you land.
+- **Nearest quests first.** Each section is sorted by distance. The order is updated at most every 15 seconds, so quests don't keep swapping places as you move.
 - **Click anywhere on a tracked quest** (not just its title) to open it in the quest log. Right-click for the menu.
 - Uses Blizzard's own tracker and quest log. The two sections are Blizzard's quest module with a filter, so clicking, right-click menus, POI buttons, quest items and super-tracking all work as usual.
 
@@ -35,6 +36,7 @@ Each zone header in the quest log shows how many of its quests are grey / green 
 - `logzone`: count it as "in the zone" if the quest log files it under this zone
 - `location`: show where pinned quests go
 - `flight`: keep the last zone's quests while flying, until you land
+- `sort`: sort tracked quests by distance, nearest first
 
 ## Where the location data comes from
 
