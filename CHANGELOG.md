@@ -2,12 +2,23 @@
 
 ## Unreleased
 
-- Click anywhere on a tracked quest, not just its title, to open it in the quest log.
-- New **Ready to turn in** section for finished quests, below your zone's quests. It hides when it's empty.
-- Zone headers in the quest log show how many quests are grey, green, yellow, orange and red.
+## 0.5.0
+
+First release on CurseForge.
+
+### Features
+
+- Quests for the zone you're in are tracked automatically, and change as you travel.
+- Tick a quest in the quest log to pin it. Pinned quests stay tracked in every zone and show where to go.
+- Finished quests move to a **Ready to turn in** section. It hides when it's empty.
 - Each section is sorted by distance, nearest first. The order changes at most every 15 seconds.
+- Click anywhere on a tracked quest to open it in the quest log.
+- Zone headers in the quest log show how many quests are grey, green, yellow, orange and red.
+- Dungeons and raids count as a zone. When flying, the tracker waits until you land to switch zones.
+
+### Fixed
+
 - The tracker updates more reliably when quest progress changes.
-- New icon.
 
 ## 0.4.0
 
