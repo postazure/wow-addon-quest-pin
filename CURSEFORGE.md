@@ -2,17 +2,17 @@
 
 ## Summary (short field)
 
-Tracks the quests for the zone you're in, and keeps the quests you pin tracked everywhere. Nearest first, with finished quests in their own section.
+Your quests are tracked automatically for the zone you're in, and change as you travel. Pin any quest to keep it tracked everywhere. Finished quests get their own section, everything sorts nearest first, and you click a quest to open it.
 
 ## Description
 
-**Quest Pin** keeps the quest tracker on what matters where you are.
+**Quest Pin** tracks your quests for the zone you're in, automatically. Travel somewhere new and the tracker follows.
 
 ![Quest Pin's tracker and quest log](https://raw.githubusercontent.com/postazure/wow-addon-quest-pin/main/screenshots/1-tracker-and-log.png)
 
 ### Features
 
-- **Your zone's quests, tracked automatically.** They change as you travel.
+- **Your zone's quests, tracked automatically.** No more ticking and unticking quests as you move between zones.
 - **Pin a quest to keep it tracked anywhere.** Tick it in the quest log. Pinned quests show where to go and where you got them.
 - **Ready to turn in.** Finished quests move to their own section.
 - **Nearest first.** Sorted by distance, without jumping around.
