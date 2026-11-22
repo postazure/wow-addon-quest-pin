@@ -7,6 +7,7 @@ Usage: python tests/run.py   (from the project root)
 import glob
 import os
 import re
+import subprocess
 import sys
 
 import lupa.lua51 as lua51
@@ -59,5 +60,9 @@ for b in bad:
     print('UNKNOWN METHOD ' + b)
 print('method check: %d unknown' % len(bad))
 ok = ok and not bad
+
+print('--- tests/test_release.py')
+if subprocess.call([sys.executable, os.path.join('tests', 'test_release.py')]) != 0:
+    ok = False
 
 sys.exit(0 if ok else 1)

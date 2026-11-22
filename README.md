@@ -2,6 +2,10 @@
 
 A WoW Forever addon (interface 16001) that keeps Blizzard's quest tracker focused on where you are.
 
+![icon](icon.png)
+
+![The tracker and quest log](screenshots/1-tracker-and-log.png)
+
 - **Zone quests are tracked automatically.** The tracker's "Quests" section becomes a section named after your zone, holding every quest whose objectives (or turn-in) are on this zone's map, or that the quest log files under this zone.
 - **Pin quests to keep them tracked anywhere.** Pinned quests sit at the top in a **Pinned** section, even in their own zone, with a "Go to *Westfall* (from *Elwynn Forest*)" line. Each quest shows once: pinned quests in Pinned, other quests in your zone in the zone section.
 - **Finished quests get their own section.** Quests from Pinned or your zone that are ready to turn in move to a **Ready to turn in** section below the zone section, with where to turn them in.
@@ -50,4 +54,8 @@ pip install lupa
 python tests/run.py
 ```
 
-This syntax-checks the Lua under 5.1 and checks widget methods against Forever's API docs (`tests/forever_widget_methods.txt`).
+This syntax-checks the Lua under 5.1 and checks widget methods against Forever's API docs (`tests/forever_widget_methods.txt`), then tests the release helpers.
+
+## Releasing
+
+A release is an annotated `v<version>` tag on main whose message is the release notes, made with the release skill (`.claude/skills/release`). Pushing the tag runs **Actions > Release**: it checks the tag matches the TOC version and `CHANGELOG.md`, tests, zips `QuestPin/`, makes the GitHub release and uploads it to CurseForge. The upload needs the `CURSEFORGE_TOKEN` secret and the `CURSEFORGE_PROJECT_ID` variable; until both are set it's skipped. The CurseForge page text is in `CURSEFORGE.md`.
